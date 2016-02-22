@@ -52,6 +52,7 @@ class Config
                 $this->checkPaths();
                 $this->checkUrls();
                 $this->checkAliases();
+                $this->checkCsvFile();
                 exit;
                 break;
             case 'snippets':
@@ -70,6 +71,14 @@ class Config
                 $this->checkAliases();
                 exit;
                 break;
+            case 'csv':
+                $this->checkCsvFile();
+                exit;
+                break;
+            default:
+                print "--checkconfig must take one of 'all', " .
+                    "'snippets', 'urls', 'paths', 'aliases', or 'csv'." . PHP_EOL;
+                exit;
         }
     }
 
@@ -184,6 +193,59 @@ class Config
         }
         else {
             print "CONTENTdm aliases are OK\n";
+        }
+    }
+
+    /**
+     * Tests whether the CSV input file is valid.
+     */
+    public function checkCsvFile()
+    {
+        // This check applies only to CSV toolchains.
+        if ($this->settings['FETCHER']['class'] != 'Csv') {
+            return;
+        }
+
+        $csv_has_errors = false;
+
+        try {
+            $reader = Reader::createFromPath($this->settings['FETCHER']['input_file']);
+        } catch (Exception $re) {
+            $csv_has_errors = true;
+            print "Error creating CSV reader: " . $re->getMessage() . PHP_EOL;
+        }
+
+        // Fetch header row and make sure columns are unique.
+        $header = $reader->fetchOne();
+        $num_header_columns = count($header);
+        foreach ($header as $header_value) {
+            if (!strlen($header_value)) {
+                $csv_has_errors = true;
+                print "Error with CSV input file: it appears that one or more header labels are blank." . PHP_EOL;
+            }
+        }
+
+        $header_values = array_unique($header);
+        if (count($header_values) != $num_header_columns) {
+            $csv_has_errors = true;
+            print "Error with CSV input file: it appears that the column headers are not unique." . PHP_EOL;
+        }
+
+        // Fetch each row and make sure that it contains the correct number of columns.
+        $rows = $reader->fetch();
+        $row_num = 0;
+        foreach ($rows as $row) {
+            $row_num++;
+            $columns_in_row = count($row);
+            if ($columns_in_row != $num_header_columns) {
+                $csv_has_errors = true;
+                print "Error with CSV input file: it appears that row $row_num does not have " .
+                    "the same number of colums ($columns_in_row) as the header row ($num_header_columns)." . PHP_EOL;
+            }
+        }
+
+        if (!$csv_has_errors) {
+            print "CSV input file appears to be OK.". PHP_EOL;
         }
     }
 
